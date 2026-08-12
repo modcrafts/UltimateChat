@@ -853,101 +853,351 @@ public class UCListener implements CommandExecutor, Listener, TabCompleter {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onChat(AsyncPlayerChatEvent e) {
         UChat.get().getUCLogger().debug("AsyncPlayerChatEvent: " + e.getMessage());
-        UChat.get().getUCLogger().timings(timingType.START, "UCListener#onChat()|Listening AsyncPlayerChatEvent");
-
-        if (e.getRecipients().isEmpty()) return;
-
+        UChat.get().getUCLogger().timings(
+            timingType.START,
+            "UCListener#onChat()|Listening AsyncPlayerChatEvent"
+        );
+    
+        UChat.get().getUCLogger().debug(
+            "Recipients: class=" + e.getRecipients().getClass().getName()
+                + ", size=" + e.getRecipients().size()
+                + ", empty=" + e.getRecipients().isEmpty()
+                + ", containsSender=" + e.getRecipients().contains(e.getPlayer())
+                + ", cancelled=" + e.isCancelled()
+        );
+    
+        if (e.getRecipients().isEmpty()) {
+            UChat.get().getUCLogger().debug("CHAT RETURN: recipients empty");
+            return;
+        }
+    
         Player p = e.getPlayer();
-
-        //check channel char
+    
+        // check channel char
         String rawMsg = e.getMessage();
+    
         for (UCChannel ch : UChat.get().getChannels().values()) {
-            if (ch.getCharAlias().isEmpty()) continue;
-
-            if (ch.getCharAlias().length() == rawMsg.length() && rawMsg.equalsIgnoreCase(ch.getCharAlias())) {
+            if (ch.getCharAlias().isEmpty()) {
+                continue;
+            }
+    
+            if (ch.getCharAlias().length() == rawMsg.length()
+                && rawMsg.equalsIgnoreCase(ch.getCharAlias())) {
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: matched exact char alias, channel=" + ch.getName()
+                );
+    
                 addPlayerToChannel(ch, p);
                 e.setCancelled(true);
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: exact char alias cancelled=" + e.isCancelled()
+                );
             }
+    
             if (rawMsg.startsWith(ch.getCharAlias())) {
+                UChat.get().getUCLogger().debug(
+                    "CHAT: matched char alias prefix, channel=" + ch.getName()
+                );
+    
                 String msg = rawMsg.substring(ch.getCharAlias().length());
-                sendMessageToPlayer(ch, p, e.getMessage().split(" "), msg);
+    
+                sendMessageToPlayer(
+                    ch,
+                    p,
+                    e.getMessage().split(" "),
+                    msg
+                );
+    
                 e.setCancelled(true);
-                if (!ch.compatCancelChatEvent()){
-                    AsyncPlayerChatEvent newEvent = new AsyncPlayerChatEvent(true, e.getPlayer(), e.getMessage(), new HashSet<>());
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: char alias prefix cancelled=" + e.isCancelled()
+                );
+    
+                if (!ch.compatCancelChatEvent()) {
+                    UChat.get().getUCLogger().debug(
+                        "CHAT: firing compatibility AsyncPlayerChatEvent from char alias"
+                    );
+    
+                    AsyncPlayerChatEvent newEvent =
+                        new AsyncPlayerChatEvent(
+                            true,
+                            e.getPlayer(),
+                            e.getMessage(),
+                            new HashSet<>()
+                        );
+    
                     Bukkit.getPluginManager().callEvent(newEvent);
                 }
             }
         }
-        if (e.isCancelled()) return;
-
-        if (UChat.get().tellPlayers.containsKey(p.getName()) && (!UChat.get().tempTellPlayers.containsKey("CONSOLE") || !UChat.get().tempTellPlayers.get("CONSOLE").equals(p.getName()))) {
-            Player tellReceiver = UChat.get().getServer().getPlayer(UChat.get().tellPlayers.get(p.getName()));
-            sendTell(p, tellReceiver, e.getMessage());
+    
+        UChat.get().getUCLogger().debug(
+            "CHAT: after char alias loop, cancelled=" + e.isCancelled()
+        );
+    
+        if (e.isCancelled()) {
+            UChat.get().getUCLogger().debug(
+                "CHAT RETURN: cancelled after char alias loop"
+            );
+            return;
+        }
+    
+        if (UChat.get().tellPlayers.containsKey(p.getName())
+            && (!UChat.get().tempTellPlayers.containsKey("CONSOLE")
+                || !UChat.get().tempTellPlayers.get("CONSOLE").equals(p.getName()))) {
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: entering tellPlayers branch"
+            );
+    
+            Player tellReceiver = UChat.get().getServer().getPlayer(
+                UChat.get().tellPlayers.get(p.getName())
+            );
+    
+            sendTell(
+                p,
+                tellReceiver,
+                e.getMessage()
+            );
+    
             e.setCancelled(true);
-        } else if (UChat.get().command.contains(p.getName()) || UChat.get().command.contains("CONSOLE")) {
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: tellPlayers cancelled=" + e.isCancelled()
+            );
+    
+        } else if (UChat.get().command.contains(p.getName())
+            || UChat.get().command.contains("CONSOLE")) {
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: entering command/tell branch"
+            );
+    
             if (UChat.get().tempTellPlayers.containsKey("CONSOLE")) {
                 String recStr = UChat.get().tempTellPlayers.get("CONSOLE");
                 Player pRec = UChat.get().getServer().getPlayer(recStr);
+    
                 if (pRec.equals(p)) {
-                    sendTell(UChat.get().getServer().getConsoleSender(), p, e.getMessage());
+                    sendTell(
+                        UChat.get().getServer().getConsoleSender(),
+                        p,
+                        e.getMessage()
+                    );
+    
                     UChat.get().tempTellPlayers.remove("CONSOLE");
                     UChat.get().command.remove("CONSOLE");
                 }
+    
             } else if (UChat.get().tempTellPlayers.containsKey(p.getName())) {
                 String recStr = UChat.get().tempTellPlayers.get(p.getName());
+    
                 if (recStr.equals("CONSOLE")) {
-                    sendTell(p, UChat.get().getServer().getConsoleSender(), e.getMessage());
+                    sendTell(
+                        p,
+                        UChat.get().getServer().getConsoleSender(),
+                        e.getMessage()
+                    );
                 } else {
-                    sendTell(p, UChat.get().getServer().getPlayer(recStr), e.getMessage());
+                    sendTell(
+                        p,
+                        UChat.get().getServer().getPlayer(recStr),
+                        e.getMessage()
+                    );
                 }
+    
                 UChat.get().tempTellPlayers.remove(p.getName());
                 UChat.get().command.remove(p.getName());
+    
             } else if (UChat.get().respondTell.containsKey(p.getName())) {
                 String recStr = UChat.get().respondTell.get(p.getName());
+    
                 if (recStr.equals("CONSOLE")) {
-                    sendTell(p, UChat.get().getServer().getConsoleSender(), e.getMessage());
+                    sendTell(
+                        p,
+                        UChat.get().getServer().getConsoleSender(),
+                        e.getMessage()
+                    );
                 } else {
-                    sendTell(p, UChat.get().getServer().getPlayer(recStr), e.getMessage());
+                    sendTell(
+                        p,
+                        UChat.get().getServer().getPlayer(recStr),
+                        e.getMessage()
+                    );
                 }
+    
                 UChat.get().command.remove(p.getName());
             }
+    
             e.setCancelled(true);
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: command/tell cancelled=" + e.isCancelled()
+            );
+    
         } else {
+            UChat.get().getUCLogger().debug(
+                "CHAT: entering normal channel branch"
+            );
+    
             UCChannel ch = UChat.get().getPlayerChannel(p);
-            if (UChat.get().tempChannels.containsKey(p.getName()) && !UChat.get().tempChannels.get(p.getName()).equals(ch.getAlias())) {
-                ch = UChat.get().getChannel(UChat.get().tempChannels.get(p.getName()));
-                UChat.get().getUCLogger().debug("AsyncPlayerChatEvent - TempChannel: " + UChat.get().tempChannels.get(p.getName()));
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: player channel="
+                    + (ch == null ? "NULL" : ch.getName())
+            );
+    
+            if (ch == null) {
+                UChat.get().getUCLogger().debug(
+                    "CHAT ERROR: player channel is NULL"
+                );
+            }
+    
+            if (UChat.get().tempChannels.containsKey(p.getName())
+                && !UChat.get().tempChannels.get(p.getName()).equals(ch.getAlias())) {
+    
+                ch = UChat.get().getChannel(
+                    UChat.get().tempChannels.get(p.getName())
+                );
+    
+                UChat.get().getUCLogger().debug(
+                    "AsyncPlayerChatEvent - TempChannel: "
+                        + UChat.get().tempChannels.get(p.getName())
+                );
+    
                 UChat.get().tempChannels.remove(p.getName());
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: effective temp channel="
+                        + (ch == null ? "NULL" : ch.getName())
+                );
             }
-
-            if (UChat.get().mutes.contains(p.getName()) || ch.isMuted(p.getName())) {
+    
+            if (UChat.get().mutes.contains(p.getName())
+                || ch.isMuted(p.getName())) {
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: player/channel is muted"
+                );
+    
                 if (UChat.get().timeMute.containsKey(p.getName())) {
-                    UChat.get().getLang().sendMessage(p, UChat.get().getLang().get("channel.tempmuted").replace("{time}", String.valueOf(UChat.get().timeMute.get(p.getName()))));
+                    UChat.get().getLang().sendMessage(
+                        p,
+                        UChat.get().getLang()
+                            .get("channel.tempmuted")
+                            .replace(
+                                "{time}",
+                                String.valueOf(
+                                    UChat.get().timeMute.get(p.getName())
+                                )
+                            )
+                    );
                 } else {
-                    UChat.get().getLang().sendMessage(p, "channel.muted");
+                    UChat.get().getLang().sendMessage(
+                        p,
+                        "channel.muted"
+                    );
                 }
+    
                 e.setCancelled(true);
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: muted branch cancelled=" + e.isCancelled()
+                );
             }
-
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: channel="
+                    + ch.getName()
+                    + ", cmdAlias="
+                    + ch.isCmdAlias()
+                    + ", compatCancelChatEvent="
+                    + ch.compatCancelChatEvent()
+            );
+    
             if (ch.isCmdAlias()) {
+                UChat.get().getUCLogger().debug(
+                    "CHAT: entering cmdAlias branch"
+                );
+    
                 String start = ch.getAliasCmd();
+    
                 if (start.startsWith("/")) {
                     start = start.substring(1);
                 }
+    
                 if (ch.getAliasSender().equalsIgnoreCase("console")) {
-                    UCUtil.performCommand(Bukkit.getConsoleSender(), start + " " + e.getMessage());
+                    UCUtil.performCommand(
+                        Bukkit.getConsoleSender(),
+                        start + " " + e.getMessage()
+                    );
                 } else {
-                    UCUtil.performCommand(p, start + " " + e.getMessage());
+                    UCUtil.performCommand(
+                        p,
+                        start + " " + e.getMessage()
+                    );
                 }
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: cmdAlias command performed"
+                );
+    
             } else {
-                UCMessages.sendFancyMessage(e.getFormat().split(","), e.getMessage(), ch, p, null);
+                UChat.get().getUCLogger().debug(
+                    "CHAT: before sendFancyMessage"
+                );
+    
+                UCMessages.sendFancyMessage(
+                    e.getFormat().split(","),
+                    e.getMessage(),
+                    ch,
+                    p,
+                    null
+                );
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: after sendFancyMessage"
+                );
             }
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: before final cancel, cancelled="
+                    + e.isCancelled()
+            );
+    
             e.setCancelled(true);
-            if (!ch.compatCancelChatEvent()){
-                AsyncPlayerChatEvent newEvent = new AsyncPlayerChatEvent(true, e.getPlayer(), e.getMessage(), new HashSet<>());
+    
+            UChat.get().getUCLogger().debug(
+                "CHAT: after final cancel, cancelled="
+                    + e.isCancelled()
+            );
+    
+            if (!ch.compatCancelChatEvent()) {
+                UChat.get().getUCLogger().debug(
+                    "CHAT: firing compatibility AsyncPlayerChatEvent"
+                );
+    
+                AsyncPlayerChatEvent newEvent =
+                    new AsyncPlayerChatEvent(
+                        true,
+                        e.getPlayer(),
+                        e.getMessage(),
+                        new HashSet<>()
+                    );
+    
                 Bukkit.getPluginManager().callEvent(newEvent);
+    
+                UChat.get().getUCLogger().debug(
+                    "CHAT: compatibility event finished"
+                );
             }
         }
+    
+        UChat.get().getUCLogger().debug(
+            "CHAT END: final cancelled=" + e.isCancelled()
+        );
     }
 
     @EventHandler
